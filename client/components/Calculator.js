@@ -5,64 +5,115 @@ import JSML from "../lib/jsml";
 const editorTextStyles = {
   fontFamily: "sans-serif",
   fontSize: "12px",
-  lineHeight: "18px"
+  lineHeight: "18px",
+  '@media (min-width: 620px)': {
+    fontFamily: "sans-serif",
+    fontSize: "16px",
+    lineHeight: "22px",
+    textAlign: "left"
+  },
+  '@media (min-width: 1024px)': {
+    fontFamily: "sans-serif",
+    fontSize: "24px",
+    lineHeight: "28px"
+  }
+};
+
+const editorWidthStyles = {
+  width: 'calc(100vw - 40px)',
+  '@media (min-width: 620px)': {
+    width: "70vw"
+  }
 };
 
 const styles = theme => ({
   container: {
     margin: "10px",
-    width: "calc(100vw - 20px)",
+    width: "calc(100vw - 32px)",
+    height: "calc(100vh - 32px)",
     borderRadius: "4px",
-    padding: "4px"
+    border: "1px solid #111",
+    background: "#222",
+    boxShadow: "0 2px 2px rgba(0, 0, 0, 0.15)",
+    color: "#eee",
+    padding: "4px",
+    cursor: "text"
   },
   editor: {
     position: "absolute",
-    left: 0,
-    top: 0,
-    width: "100vw",
-    height: "100vh",
+    left: "10px",
+    top: "10px",
+    ...editorWidthStyles,
+    height: "calc(100vh - 40px)",
     zIndex: 1,
     background: "transparent",
-    width: "70vw",
-    height: "calc(100vh - 20px)",
     border: "none",
     padding: "10px",
     margin: 0,
     resize: "none",
     color: "rgba(0, 0, 0, 0)",
-    caretColor: "#000",
+    caretColor: "#fff",
     outline: "none",
     ...editorTextStyles
   },
   overlay: {
     position: "absolute",
-    left: 0,
-    top: 0,
-    width: "calc(100vw - 20px)",
-    height: "calc(100vh - 20px)",
+    left: "10px",
+    top: "10px",
+    width: "calc(100vw - 40px)",
+    height: "calc(100vh - 40px)",
     padding: "10px",
     ...editorTextStyles
   },
   row: {
     minHeight: "18px",
-    width: "100%",
-    borderBottom: "1px solid #ccc",
-    lineHeight: "18px"
+    width: "100%"
   },
   lines: {
     display: "table"
   },
   line: {
-    width: "70vw",
-    display: "inline-block"
+    ...editorWidthStyles,
+    display: "inline-block",
+    "& span.function": {
+      color: "rgb(200, 180, 225)"
+    },
+    "& span.param": {
+      color: "rgb(235, 235, 235)"
+    },
+    "& span.variable": {
+      color: "rgb(105, 175, 235)"
+    },
+    "& span.number": {
+      color: "rgb(105, 195, 145)"
+    },
+    "& span.value": {
+      color: "rgb(235, 200, 150)"
+    },
+    "& span.url": {
+      color: "rgba(200, 200, 200, 0.9)"
+    },
+    "& span.data": {
+      color: "rgba(200, 200, 200, 0.9)"
+    },
+    "& span.comment": {
+      color: "rgba(200, 200, 200, 0.9)"
+    }
   },
   output: {
-    width: "calc(30vw - 94px)",
-    marginLeft: "64px",
-    textAlign: "center",
+    width: "calc(100vw - 40px)",
+    '@media (min-width: 520px)': {
+      width: "calc(30vw - 65px)",
+    },
+    marginLeft: "10px",
+    paddingLeft: "10px",
+    borderLeft: "1px solid rgba(245,245,245,0.25)",
+    textAlign: "left",
     display: "inline-block",
+    fontSize: "12px",
     verticalAlign: "top",
-    color: "#ff0000"
+    color: "rgba(200,235,255,0.9)",
+    background: "rgba(245,245,245,0.1)"
   }
 });
 
@@ -88,15 +139,15 @@ const Lines = styledDiv("lines");
 const LineContainer = styledDiv("line");
 const Output = styledDiv("output");
 
-const colorSpan = color => content =>
-  `<span style="color:${color};">${content}</span>`;
-const fnTag = colorSpan("blue");
-const paramTag = colorSpan("gray");
-const varTag = colorSpan("orange");
-const numTag = colorSpan("green");
-const valTag = colorSpan("red");
-const pathTag = colorSpan("#2211aa");
-const dataTag = colorSpan("purple");
+const tagSpan = type => content =>
+  `<span class="${type}">${content}</span>`;
+const fnTag = tagSpan("function");
+const paramTag = tagSpan("param");
+const varTag = tagSpan("variable");
+const numTag = tagSpan("number");
+const valTag = tagSpan("value");
+const pathTag = tagSpan("url");
+const dataTag = tagSpan("data");
 
 const urlTag = (url, data = "") =>
   pathTag(url) + (data ? `:${dataTag(data)}` : "");
@@ -215,7 +266,7 @@ export default class Calculator extends Component {
           autoCapitalize="false"
           spellCheck="false"
         />
-        <Overlay>
+        <Overlay onClick={this.onClickOverlay}>
           <Lines>
             {input.map((line, index) => (
               <Row key={index}>

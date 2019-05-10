@@ -1,0 +1,10 @@
+version: "3.0"
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/opt/incalclacable
+    ports:
+      - 3000:3000
