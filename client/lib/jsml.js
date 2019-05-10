@@ -12,41 +12,62 @@ const SINGLE_PARAM_METHODS = [
   "sqrt"
 ];
 const ARRAY_PARAM_METHODS = ["min", "max", "sum", "avg", "mean", "mode"];
+const ASSIGNMENT_OPERATORS = {
+  equality: ' = ',
+  subtraction: ' -= ',
+  addition: ' += ',
+  multiplication: ' *= ',
+  division: ' /= '
+};
 
 const JSML = {
   cache: {},
-  state: {},
+  stateCacheKeys: {},
   stateCache: {},
-  setState: data => {
-    Object.assign(JSML.state, data);
-  },
-  parse: async (...script) => {
+  parse: async (script, state = {}) => {
     const meta = [];
     const output = [];
 
     const lines = JSML.flatten(script);
 
+    state = { ...state };
+    console.log('Parse start');
+
     for (let index in lines) {
       let line = lines[index];
       if (typeof line === "function") {
         try {
-          line = line(JSML.state);
+          line = line(state);
         } catch (e) {}
       }
 
-      line = JSML.parseFunctions(line, JSML.state);
+      line = JSML.parseFunctions(line, state);
+
+      let assignmentType = false;
+      if (line.match(/([a-zA-Z0-9]+) \= (.*)/g)) {
+        assignmentType = "equality";
+      } else if (line.match(/([a-zA-Z0-9]+) \-\= (.*)/g)) {
+        assignmentType = "subtraction";
+      } else if(line.match(/([a-zA-Z0-9]+) \+\= (.*)/g)) {
+        assignmentType = "addition";
+      } else if(line.match(/([a-zA-Z0-9]+) \*\= (.*)/g)) {
+        assignmentType = "multiplication";
+      } else if(line.match(/([a-zA-Z0-9]+) \\= (.*)/g)) {
+        assignmentType = "division";
+      }
 
       if (line.indexOf("--") === 0) {
         // This is a comment, so we do nothing.
-      } else if (line.includes("=")) {
-        let [assigned, ...parts] = line.split("=");
+      } else if (assignmentType) {
+        const operator = ASSIGNMENT_OPERATORS[assignmentType];
+        let [assigned, ...parts] = line.split(operator);
         assigned = assigned.trim();
-        let assignment = parts.join("=").trim();
+        let assignment = parts.join(operator).trim();
 
-        if (!JSML.stateCache[index] || JSML.stateCache[index] !== assignment) {
-          JSML.stateCache[index] = `${assignment}`;
+        if (!JSML.stateCacheKeys[index] || JSML.stateCacheKeys[index] !== assignment) {
+          JSML.stateCacheKeys[index] = `${assignment}`;
 
-          if (assignment.indexOf("(") === 0) {
+          if (assignmentType === "equality" && assignment.indexOf("(") === 0) {
             const matches = assignment.match(
               /\((http|https):\/\/([^:]+):?([A-Za-z]+)?\):?(.*)?/i
             );
@@ -77,13 +98,35 @@ const JSML = {
           }
 
           try {
-            assignment = mjs.eval(assignment, JSML.state);
+            // TODO: replace state definitions
+            assignment = mjs.eval(assignment, state);
+            console.log('Evaluated assignment', assigned, assignment);
           } catch (e) {}
 
-          JSML.state[assigned] = assignment;
+          if (assignmentType === "equality") {
+            state[assigned] = assignment;
+          } else {
+            try {
+              if (assignmentType === "subtraction") {
+                state[assigned] -= assignment;
+              } else if (assignmentType === "addition") {
+                state[assigned] += assignment;
+              } else if (assignmentType === "multiplication") {
+                state[assigned] *= assignment;
+              } else if (assignmentType === "division") {
+                state[assigned] /= assignment;
+              }
+              assignment = state[assigned];
+            } catch(e) {
+              state[assigned] = NaN;
+            }
+          }
+
+          JSML.stateCache[index] = state[assigned];
         } else {
-          assignment = JSML.state[assigned];
+          state[assigned] = assignment = JSML.stateCache[index];
         }
+
         meta.push({
           type: "assignment",
           target: assigned,
@@ -93,10 +136,11 @@ const JSML = {
       } else {
         let value = line
           .split(" ")
-          .map(v => get(JSML.state, v.trim(), v))
+          .map(v => get(state, v.trim(), v))
           .join(" ");
         try {
-          value = mjs.eval(value, JSML.state);
+          console.log(value, state);
+          value = mjs.eval(value, state);
         } catch (e) {
           console.log(e);
         }
@@ -115,7 +159,7 @@ const JSML = {
       }
     }
 
-    return [output, meta];
+    return [output, meta, state];
   },
   flatten: (parts, root = []) => {
     parts.forEach(part => {
@@ -143,7 +187,7 @@ const JSML = {
 
     return root;
   },
-  parseFunctions: string => {
+  parseFunctions: (string, state) => {
     // We're calling a custom function on a thing
     let i = 0;
     return (string + "").replace(
@@ -153,22 +197,22 @@ const JSML = {
         const params = paramStr.replace(/ /g).split(",");
 
         if (fn === "count" || fn === "length") {
-          const things = get(JSML.state, params[0]);
+          const things = get(state, params[0]);
           return things ? things.length : 0;
         } else if (fn === "rand" || fn === "random") {
           const seed = params.length ? params[0] : i;
-          return JSML.FUNCTION.random(seed);
+          return JSML.FUNCTION.random(seed, state);
         } else if (SINGLE_PARAM_METHODS.includes(fn)) {
-          const thing = get(JSML.state, params[0], params[0]);
+          const thing = get(state, params[0], params[0]);
           return Math[fn](thing);
         } else if (ARRAY_PARAM_METHODS.includes(fn)) {
           const values = [];
           params.forEach(param => {
-            let value = get(JSML.state, param, 0);
+            let value = get(state, param, 0);
             if (!value) {
               const parts = param.split(".");
               const key = parts.pop();
-              get(JSML.state, parts.join("."), []).forEach(v => {
+              get(state, parts.join("."), []).forEach(v => {
                 values.push(v[key]);
               });
             } else {
@@ -219,7 +263,7 @@ const JSML = {
     },
     random: seed => {
       try {
-        seed = mjs.eval(seed, JSML.state);
+        seed = mjs.eval(seed, state);
       } catch (e) {}
       let t = (seed += 0x6d2b79f5);
       t = Math.imul(t ^ (t >>> 15), t | 1);

@@ -2,11 +2,13 @@ import React, { Component } from "react";
 import injectSheet from "react-jss";
 import JSML from "../lib/jsml";
 
-const editorTextStyles = {
+const editorStyles = forEditor => ({
   fontFamily: "sans-serif",
   fontSize: "12px",
-  lineHeight: "18px",
+  lineHeight: forEditor ? "36px" : "18px",
+  width: 'calc(100vw - 40px)',
   '@media (min-width: 620px)': {
+    width: "70vw",
     fontFamily: "sans-serif",
     fontSize: "16px",
     lineHeight: "22px",
@@ -17,14 +19,7 @@ const editorTextStyles = {
     fontSize: "24px",
     lineHeight: "28px"
   }
-};
-
-const editorWidthStyles = {
-  width: 'calc(100vw - 40px)',
-  '@media (min-width: 620px)': {
-    width: "70vw"
-  }
-};
+});
 
 const styles = theme => ({
   container: {
@@ -40,10 +35,10 @@ const styles = theme => ({
     cursor: "text"
   },
   editor: {
+    appearance: "none",
     position: "absolute",
     left: "10px",
     top: "10px",
-    ...editorWidthStyles,
     height: "calc(100vh - 40px)",
     zIndex: 1,
     background: "transparent",
@@ -54,7 +49,7 @@ const styles = theme => ({
     color: "rgba(0, 0, 0, 0)",
     caretColor: "#fff",
     outline: "none",
-    ...editorTextStyles
+    ...editorStyles(true),
   },
   overlay: {
     position: "absolute",
@@ -62,8 +57,7 @@ const styles = theme => ({
     top: "10px",
     width: "calc(100vw - 40px)",
     height: "calc(100vh - 40px)",
-    padding: "10px",
-    ...editorTextStyles
+    padding: "10px"
   },
   row: {
     minHeight: "18px",
@@ -73,8 +67,9 @@ const styles = theme => ({
     display: "table"
   },
   line: {
-    ...editorWidthStyles,
+    ...editorStyles(false),
     display: "inline-block",
+    wordWrap: "break-word",
     "& span.function": {
       color: "rgb(200, 180, 225)"
     },
@@ -102,8 +97,14 @@ const styles = theme => ({
   },
   output: {
     width: "calc(100vw - 40px)",
-    '@media (min-width: 520px)': {
+    '@media (min-width: 620px)': {
       width: "calc(30vw - 65px)",
+      fontSize: "16px",
+      lineHeight: "22px",
+    },
+    '@media (min-width: 1024px)': {
+      fontSize: "24px",
+      lineHeight: "28px"
     },
     marginLeft: "10px",
     paddingLeft: "10px",
@@ -167,14 +168,14 @@ const Line = ({ text }) => {
     return `${varTag(variable)} = `;
   });
 
-  // Number highlighting
-  html = html.replace(/ ([0-9]+)/g, match => numTag(match));
-
   // URL highlighting
   html = html.replace(
     / = \(([^\)]+)\):?(.*)?/g,
     (match, url, data) => `<span> = </span>(${urlTag(url, data)})`
   );
+
+  // Number highlighting
+  html = html.replace(/ ([0-9]+)[ \n]/g, match => numTag(match));
 
   // Value highlighting
   html = html.replace(/ = ([^<]+)/g, (match, val) => ` = ${valTag(val)}`);
@@ -194,17 +195,37 @@ export default class Calculator extends Component {
   constructor(props) {
     super(props);
     this.state.raw = props.initialValue
-      ? props.initialValue
-          .trim()
-          .replace(/ /g, "")
-          .replace(/[=*+^-]/g, " = ")
+      ? this.cleanRawInput(props.initialValue)
       : "";
     this.state.input = this.state.raw.split("\n");
 
     this.setValue(this.state.raw);
   }
 
-  setValue = (raw = "") => {
+  cleanRawInput(input, enforceSpacing=false) {
+    let out = (input + "");
+
+    if (enforceSpacing) {
+      out = out.replace(/ /g, "")
+        .replace(/^([a-zA-Z0-9\.\[\]]+)([\=\*\+\^\-]+)(.*)$/gm, (full, pre, ops, post) => {
+          return full.replace(pre + ops + post, `${pre} ${ops} ${post}`);
+        })
+        .replace(/ = ([a-zA-Z0-9\.\[\]]+)([\=\*\+\^\-]+)([a-zA-Z0-9]+)/g, (full, pre, ops, post) => {
+          return full.replace(pre + ops + post, `${pre} ${ops} ${post}`);
+        }).split("\n").map(v => v.trim());
+    } else {
+      out = out.split("\n");
+    }
+
+    if (!out[0].length) {
+      out.shift();
+    }
+
+    return out.join("\n");
+  }
+
+  setValue = (raw = "", state = {}, stripWhitespace=false) => {
+    raw = this.cleanRawInput(raw, stripWhitespace);
     const input = raw ? raw.split("\n") : [];
     if (this.state.raw !== raw) {
       this.setState({
@@ -213,7 +234,7 @@ export default class Calculator extends Component {
       });
     }
 
-    JSML.parse(input).then(([output, meta, assignments]) => {
+    JSML.parse(input, state).then(([output, meta, assignments]) => {
       this.setState({
         output,
         meta,
@@ -230,24 +251,18 @@ export default class Calculator extends Component {
     this.setValue(e.currentTarget.value);
   };
 
-  parse = () => {
-    return this.onChange({ currentTarget: { value: this.state.raw } });
-  };
 
   componentDidMount() {
     this.mouseUpListener = document.addEventListener("mouseup", e => {
-      JSML.setState({
-        clickX: e.clientX,
-        clickY: e.clientY
-      });
-
-      Object.keys(JSML.stateCache).forEach(key => {
+      // Invalidate cache for anything referencing clickX or clickY
+      Object.keys(JSML.stateCacheKeys).forEach(key => {
         if (key.includes("clickX") || key.includes("clickY")) {
+          delete JSML.stateCacheKeys[key];
           delete JSML.stateCache[key];
         }
       });
 
-      return this.parse();
+      return this.setValue(this.state.raw, { clientX: e.clientX, clickY: e.clientY }, true);
     });
   }
 
