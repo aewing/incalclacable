@@ -6,14 +6,14 @@ const serve = require("@emitterware/serve");
 const app = new App();
 
 const http = new HTTP({
-	host: "0.0.0.0",
-	port: 3000
+	host: process.env.HOST || "localhost",
+	port: process.env.PORT || 3000
 });
 
 app.subscribe(http);
 
-if (process.env.NODE_ENV === "production") {
-	app.on("http", serve("/", path.resolve("../dist"), true));
-} else {
+// if (process.env.NODE_ENV === "production") {
+	// app.on("http", serve("/", path.resolve("../dist"), true));
+// } else {
 	app.on("http", new Bundler("client/index.html"));
-}
+// }
