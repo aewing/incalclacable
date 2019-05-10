@@ -24,14 +24,167 @@ const JSML = {
   cache: {},
   stateCacheKeys: {},
   stateCache: {},
+  taggedMarkup: (text) => {
+    let tags = (JSML.format(text) + "").replace(/\[\[/g, "[").replace(/\]\]/g, "]").replace(/::/g, ":");
+    // Function highlighting
+    tags = tags.replace(/@([^\(]+)\(([^\)]+)\)/g, (match, fn, paramStr) => {
+      return `[[function::@${fn.trim()}(${paramStr.split(',').map(param => `[[param::${param}]]`).join(',').trim()})]]`;
+    });
+
+    // Variable highlighting
+    tags = tags.replace(/([^=]+) ([\=\+\*\-\\]+) /g, (match, variable, ops) => {
+      return `[[variable::${variable.trim()}]] [[operator::${ops.trim()}]] `;
+    });
+
+    // URL highlighting
+    tags = tags.replace(
+      / ([\=\+\-\*\\]+) \(([^\)]+)\):?(.*)?/g,
+      (match, ops, url, data) => `[[operator::${ops}]] ([[url::${url.trim()}::${data.trim()}]])`
+    );
+
+    // Number highlighting
+    tags = tags.replace(/([ \n])([0-9]+)([ \n])/g, (match, pre, num, post) => `${pre}[[number::${num.trim()}]]${post}`);
+
+    // Value highlighting
+    tags = tags.replace(/(\[\[operator::.*\]\]) ([^<]+)/g, (match, op, val) => `${op} [[value::${val.trim()}]]`);
+
+    return tags;
+  },
+  getTags: text => {
+    const markup = JSML.taggedMarkup(text);
+    return JSML.parseTaggedMarkup(markup, true);
+  },
+  parseTaggedMarkup: (text, recursively = false) => {
+    const state = {
+      seeking: true,
+      what: 'text',
+      buffer: '',
+      type: false,
+      innerTagSkip: 0,
+      hasInnerTag: false,
+      index: 0
+    };
+
+    const output = [];
+
+    while (state.seeking && state.index < text.length) {
+      const char = text[state.index];
+      if (!char) {
+        state.seeking = false;
+      }
+
+      if (state.what === 'text') {
+        if (char === '[') {
+          state.what = 'type';
+          if (state.buffer.length) {
+            output.push({ type: "text", value: state.buffer + '' });
+            state.buffer = '';
+          }
+        } else {
+          state.buffer += char;
+        }
+      }
+
+      if (state.what === 'type') {
+        if (char === '[') {
+          // Ignore opening bracket and skip an index
+          state.index++;
+        } else if (char === ':' && text[state.index + 1] === ':') {
+          // We have a variable name
+          state.what = 'def';
+          state.type = state.buffer + '';
+          state.buffer = '';
+          // Skip an index
+          state.index++;
+        } else {
+          state.buffer += char;
+        }
+      } else if (state.what === 'def') {
+        if (char === ':') {
+          if (state.buffer === '') {
+            // Ignore opening colon and skip an index
+            state.index++;
+          } else {
+            state.buffer += char;
+          }
+        } else if (char === ']') {
+          if (state.innerTagSkip) {
+            state.buffer += char;
+            state.innerTagSkip--;
+          } else {
+            // We have a completed definition
+
+            let def = null;
+            if (state.hasInnerTag && recursively) {
+              // Parse definition recursively
+              def = JSML.parseTaggedMarkup(state.buffer, true)
+            } else {
+              def = state.buffer;
+            }
+
+            output.push({
+              type: state.type,
+              value: def
+            });
+
+            // Reset state
+            Object.assign(state, {
+              what: 'text',
+              buffer: '',
+              type: false,
+              innerTagSkip: 0,
+              hasInnerTag: false
+            });
+
+            // Skip the next bracket
+            state.index++;
+          }
+        } else if (char === '[') {
+          state.hasInnerTag = true;
+          state.innerTagSkip++;
+          state.buffer += char;
+        } else {
+          state.buffer += char;
+        }
+      }
+
+      state.index++;
+    }
+
+    if (state.buffer) {
+      output.push({ type: "text", value: state.buffer });
+    }
+
+    return output;
+  },
+  format: (text, enforceSpacing = false) => {
+    let out = (text + "");
+
+    if (enforceSpacing) {
+      out = out.replace(/ /g, "")
+        .replace(/^([a-zA-Z0-9\.\[\]]+)([\=\*\+\^\-]+)(.*)$/gm, (full, pre, ops, post) => {
+          return full.replace(full, `${pre} ${ops} ${post}`);
+        })
+        .replace(/ = ([a-zA-Z0-9\.\[\]]+)([\=\*\+\^\-]+)([a-zA-Z0-9]+)/g, (full, pre, ops, post) => {
+          return full.replace(full, `${pre} ${ops} ${post}`);
+        }).split("\n").map(v => v.trim());
+    } else {
+      out = out.split("\n");
+    }
+
+    if (!out[0].length) {
+      out.shift();
+    }
+
+    return out.join("\n");
+  },
   parse: async (script, state = {}) => {
     const meta = [];
     const output = [];
 
     const lines = JSML.flatten(script);
 
-    state = { ...state };
-    console.log('Parse start');
+    state = { clickX: 0, clickY: 0, ...state };
 
     for (let index in lines) {
       let line = lines[index];
@@ -98,10 +251,15 @@ const JSML = {
           }
 
           try {
-            // TODO: replace state definitions
-            assignment = mjs.eval(assignment, state);
-            console.log('Evaluated assignment', assigned, assignment);
-          } catch (e) {}
+            // TODO: replace instead of split to catch unspaced operators
+            let value = line
+              .split(" ")
+              .map(v => get(state, v.trim(), v))
+              .join(" ");
+            assignment = mjs.eval(value, state);
+          } catch (e) {
+            console.info(e);
+          }
 
           if (assignmentType === "equality") {
             state[assigned] = assignment;
@@ -139,10 +297,9 @@ const JSML = {
           .map(v => get(state, v.trim(), v))
           .join(" ");
         try {
-          console.log(value, state);
           value = mjs.eval(value, state);
         } catch (e) {
-          console.log(e);
+          console.info(e);
         }
         meta.push({
           type: "eval",
@@ -261,10 +418,12 @@ const JSML = {
         .sort((a, b) => a[1] - b[1])
         .pop()[0];
     },
-    random: seed => {
+    random: (seed, state) => {
       try {
         seed = mjs.eval(seed, state);
-      } catch (e) {}
+      } catch (e) {
+        console.info(e);
+      }
       let t = (seed += 0x6d2b79f5);
       t = Math.imul(t ^ (t >>> 15), t | 1);
       t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
