@@ -231,10 +231,14 @@ export default class Calculator extends Component {
     this.keyPressListener = this.editorRef.current.addEventListener("keyup", e => {
       if (
         (e.code === "Space" && e.ctrlKey) 
-          || ["Enter", "Tab", "Space"].includes(e.code)
+          || ["Enter", "Tab"].includes(e.code)
           || ["(", ")"].includes(e.key)
       ) {
         this.setValue(this.state.raw, true);
+      }
+
+      if (e.code === "Tab") {
+        return false;
       }
     });
 
