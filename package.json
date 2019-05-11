@@ -5,6 +5,10 @@
   "keywords": [],
   "main": "src/index.js",
   "dependencies": {
+    "@babel/core": "^7.4.4",
+    "@babel/plugin-proposal-class-properties": "^7.4.4",
+    "@babel/plugin-transform-runtime": "^7.4.4",
+    "@babel/preset-react": "^7.0.0",
     "@emitterware/app": "^0.1.0",
     "@emitterware/bundler": "^0.1.0",
     "@emitterware/http": "^0.1.1",
@@ -19,12 +23,6 @@
     "react-jss": "^8.6.1",
     "styled-components": "^4.2.0",
     "styled-system": "^4.2.2"
-  },
-  "devDependencies": {
-    "@babel/core": "^7.4.4",
-    "@babel/plugin-proposal-class-properties": "^7.4.4",
-    "@babel/plugin-transform-runtime": "^7.4.4",
-    "@babel/preset-react": "^7.0.0"
   },
   "scripts": {
     "start": "node server",
