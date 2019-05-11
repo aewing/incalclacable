@@ -11,9 +11,8 @@ render(
     <ThemeProvider theme={{}}>
       <Calculator
         initialValue={`
-          r = @random(clickX)
-          a = 50
-          r * a
+          r = (http://api.coindesk.com/v1/bpi/historical/close.json)
+          r.2019-04-10
         `}
       />
     </ThemeProvider>

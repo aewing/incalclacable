@@ -230,6 +230,10 @@ const JSML = {
               const url = `${protocol}://${path}`;
               const cacheKey = `${method}.${url}.${JSON.stringify(data)}`;
 
+              // Temporary fix for CORS
+              // Long-term solution: Make API requests on the backend
+              url = `https://cors-anywhere.herokuapp.com/${url}`;
+
               if (JSML.cache[cacheKey]) {
                 assignment = JSML.cache[cacheKey];
               } else {

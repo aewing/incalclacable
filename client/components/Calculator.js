@@ -54,7 +54,7 @@ const Editor = styled.textarea`
     overflow: auto;
   }
   @media(min-width: 521px) {
-    width: 30%;
+    width: 70%;
     float: left;
   }
 `;
