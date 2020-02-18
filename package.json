@@ -14,7 +14,7 @@
     "@emitterware/bundler": "^0.1.0",
     "@emitterware/http": "^0.1.1",
     "@emitterware/serve": "0.0.1",
-    "axios": "0.18.0",
+    "axios": "0.18.1",
     "babel-plugin-styled-components": "^1.10.0",
     "lodash.get": "4.4.2",
     "mathjs": "5.10.0",
